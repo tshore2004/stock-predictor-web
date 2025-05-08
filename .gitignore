@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Models & big artefacts
+models/*
+!models/README.md     # keep a placeholder
+logs/
+
+# Secrets
+.env
+
+# Node
+web/.next/
+web/node_modules/
+
+# VS Code
+.vscode/
