@@ -14,8 +14,9 @@ export default function Home() {
   // fetch accuracy once on mount
   useEffect(() => {
     fetch(`${api}/metrics`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
+        if (!j) return;
         setMae(j.val_mae);
         setBaseline(j.baseline);
       });
