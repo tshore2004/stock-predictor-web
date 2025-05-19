@@ -1,5 +1,5 @@
 from __future__ import annotations
-import time
+from datetime import date
 import numpy as np, pandas as pd, yfinance as yf, ta
 import pandas_datareader.data as web     
 from sklearn.preprocessing import StandardScaler
@@ -72,3 +72,43 @@ def load_data(stock: str, start: str, end: str):
     y = df["Return"].to_numpy("float32")[SEQ_LEN:].reshape(-1, 1)
     return X, y, scaler
 
+def fetch_features(ticker: str, api_key: str | None = None) -> np.ndarray | None:
+    """
+    Return the most-recent 60×8 *raw* feature matrix for `ticker`.
+    Raw = not standard-scaled; /predict will scale it.
+
+    Returns:
+        np.ndarray shape (SEQ_LEN, len(FEATS))  or  None if no data.
+    """
+    today = date.today().isoformat()
+    start = "2020-09-01"
+    try:
+        df = daily_bars(ticker, start, today, api_key=api_key)
+        print("Polygon rows:", len(df)) 
+    except Exception:
+        df = web.DataReader(ticker, "stooq", start, today)
+
+    if df.empty:
+        return None
+
+    df.rename(columns=str.title, inplace=True)
+    df.reset_index(inplace=True)
+
+    # technical indicators
+    df["MA10"] = df["Close"].rolling(10).mean()
+    df["MA50"] = df["Close"].rolling(50).mean()
+    df["RSI"]  = ta.momentum.RSIIndicator(df["Close"]).rsi()
+
+    macd = ta.trend.MACD(df["Close"])
+    df["MACD"]        = macd.macd()
+    df["MACD_Signal"] = macd.macd_signal()
+
+    bb = ta.volatility.BollingerBands(df["Close"])
+    df["BB_High"] = bb.bollinger_hband()
+    df["BB_Low"]  = bb.bollinger_lband()
+    df.dropna(inplace=True)
+
+    if len(df) < SEQ_LEN:
+        return None
+
+    return df[FEATS].tail(SEQ_LEN).to_numpy("float32")

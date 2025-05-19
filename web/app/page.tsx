@@ -9,6 +9,8 @@ export default function Home() {
   const api = process.env.NEXT_PUBLIC_API;
   const [baseline, setBaseline] = useState<number | null>(null);
   const [ticker, setTicker] = useState("AAPL");
+  
+  
   // fetch accuracy once on mount
   useEffect(() => {
     fetch(`${api}/metrics`)
@@ -21,9 +23,9 @@ export default function Home() {
 
   async function handlePredict() {
 
-    const api = process.env.NEXT_PUBLIC_API!;
+    
     try {
-      const res = await fetch(`${api}/train-and-predict?ticker=${ticker}`);
+      const res = await fetch(`${api}/predict?ticker=${ticker}`);
       const { prediction } = await res.json();
       setPrediction(prediction);
     } catch (err) {

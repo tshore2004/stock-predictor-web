@@ -18,7 +18,7 @@ def daily_bars(ticker: str, start: str, end: str) -> pd.DataFrame:
     
     response = requests.get(url, params=_params())
     print("URL:", response.url)  # ← show full API URL with key
-    print("Response JSON:", response.json())  # ← check for status & error
+    # print("Response JSON:", response.json())  # ← check for status & error
     
     r   = requests.get(url, params=_params()).json()
     if r.get("status") not in {"OK", "DELAYED"}:
@@ -38,4 +38,3 @@ def latest_close(ticker: str) -> float:
     r   = requests.get(url, params=_params()).json()
     return float(r["results"][0]["c"])
 
-print("POLYGON_API_KEY:", os.getenv("POLYGON_API_KEY"))
