@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 
-type Matrix = number[][]; // 60×8
+// type Matrix = number[][]; // 60×8
 
 export default function Home() {
   const [mae, setMae] = useState<number | null>(null);
@@ -20,18 +20,7 @@ export default function Home() {
   }, [api]);
 
   async function handlePredict() {
-  //   const api = process.env.NEXT_PUBLIC_API!;
-  //   const featRes = await fetch(`${api}/latest-window?ticker=${ticker}`);
-  //   const window: Matrix = await featRes.json();
 
-  //   const res = await fetch(`${api}/predict`, {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: JSON.stringify(window),
-  //   });
-  //   const { prediction } = await res.json();
-  //   setPrediction(prediction);
-  // }
     const api = process.env.NEXT_PUBLIC_API!;
     try {
       const res = await fetch(`${api}/train-and-predict?ticker=${ticker}`);
