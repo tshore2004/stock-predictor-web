@@ -32,9 +32,10 @@ export default function Home() {
     }
   }
 
-  function fmtPct(dollars: number, base: number) {
-    return ((dollars / base) * 100).toFixed(2);
-  }
+  // function fmtPct(dollars: number, base: number) {
+  //   return ((dollars / base) * 100).toFixed(2);
+  // }
+
   return (
     <main className="min-h-screen flex flex-col items-center gap-6 p-6">
       <h1 className="text-3xl font-bold">Stock Predictor Demo</h1>
