@@ -31,7 +31,8 @@ SEQ_LEN = 60
 app = FastAPI(title="Stock Predictor API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # adjust for prod
+    allow_origins=["https://stock-predictor-web.vercel.app",
+                   "http://localhost:3000"],  # adjust for prod
     allow_methods=["*"],
     allow_headers=["*"],
 )
