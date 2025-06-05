@@ -71,6 +71,8 @@ from src.ml.poly import daily_bars
 # ---------- 1. Cross-platform, Vercel-safe model directory ----------
 MODEL_DIR = Path(tempfile.gettempdir()) / "stock_models"
 MODEL_DIR.mkdir(exist_ok=True, parents=True)
+# Pretrained models shipped with the repo
+REPO_MODEL_DIR = Path(__file__).resolve().parent / "models"
 
 
 # ---------- 2. Model architecture ----------
@@ -136,22 +138,33 @@ def model_path(ticker: str) -> Path:
     """Return full Path to the cached keras file for this ticker."""
     return MODEL_DIR / f"{ticker.upper()}.keras"
 
+def repo_model_path(ticker: str) -> Path:
+    return REPO_MODEL_DIR / f"{ticker.upper()}.keras"
+
 def scaler_path(ticker: str) -> Path:
     """Return Path to the cached scaler.joblib for this ticker."""
-    return MODEL_DIR / f"{ticker.upper()}.joblib"
+    p = MODEL_DIR / f"{ticker.upper()}.joblib"
+    return p if p.exists() else repo_scaler_path(ticker)
+
+def repo_scaler_path(ticker: str) -> Path:
+    return REPO_MODEL_DIR / f"{ticker.upper()}.joblib"
 
 def load_cached_model(ticker: str):
-    """Load keras model if it exists, else return None (for FastAPI endpoint)."""
+    """Load keras model from tmp or repo, else return None."""
     from tensorflow import keras
-    p = model_path(ticker)
-    return keras.models.load_model(p) if p.exists() else None
+    for path in [model_path(ticker), repo_model_path(ticker)]:
+        if path.exists():
+            return keras.models.load_model(path)
+    return None
 
 # ---------- 4. Helper for FastAPI endpoint ----------
 def load_model(ticker: str):
     from tensorflow import keras
 
-    path = MODEL_DIR / f"{ticker}.keras"
-    return keras.models.load_model(path) if path.exists() else None
+    for path in [model_path(ticker), repo_model_path(ticker)]:
+        if path.exists():
+            return keras.models.load_model(path)
+    return None
 
 
 # ---------- 5. CLI demo (runs only when you execute this file directly) ----------
