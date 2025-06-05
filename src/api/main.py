@@ -37,6 +37,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"message": "Stock Predictor API"}
+
 @app.get("/ping")
 def ping(): return {"msg": "pong"}
 
