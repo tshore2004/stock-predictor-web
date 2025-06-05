@@ -8,19 +8,17 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env", override=T
 
 BASE = "https://api.polygon.io"
 
-def _params():
-    key = os.getenv("POLYGON_API_KEY", "")
+def _params(api_key: str | None = None):
+    key = api_key if api_key is not None else os.getenv("POLYGON_API_KEY", "")
     return {"apiKey": key} if key else {}
 
-def daily_bars(ticker: str, start: str, end: str) -> pd.DataFrame:
+def daily_bars(ticker: str, start: str, end: str, api_key: str | None = None) -> pd.DataFrame:
     """Return split‑*unadjusted* daily OHLCV from Polygon."""
     url = f"{BASE}/v2/aggs/ticker/{ticker}/range/1/day/{start}/{end}"
-    
-    response = requests.get(url, params=_params())
-    print("URL:", response.url)  # ← show full API URL with key
-    # print("Response JSON:", response.json())  # ← check for status & error
-    
-    r   = requests.get(url, params=_params()).json()
+
+    r = requests.get(url, params=_params(api_key))
+    # print("URL:", r.url)  # debug
+    r = r.json()
     if r.get("status") not in {"OK", "DELAYED"}:
         raise RuntimeError(r.get("error", "Polygon error"))
     df = pd.DataFrame(r["results"])
