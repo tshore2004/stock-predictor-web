@@ -12,12 +12,18 @@ import joblib, os
 from src.ml.poly import daily_bars, latest_close
 
 from src.ml.train import (
-    build_model, load_cached_model, train_for_ticker,
-    model_path, scaler_path,
+    build_model,
+    load_cached_model,
+    train_for_ticker,
+    model_path,
+    scaler_path,
 )
 from src.ml.data import (
     load_data, fetch_features, SEQ_LEN, FEATS
 )
+
+# Pretrained models are bundled under src/ml/models and loaded before
+# triggering a new training run. This avoids long cold-starts on Vercel.
 
 METRICS_PATH = Path("models/metrics.json")
 

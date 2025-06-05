@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 export default function Home() {
   const [mae, setMae] = useState<number | null>(null);
   const [prediction, setPrediction] = useState<number | null>(null);
-  const api = process.env.NEXT_PUBLIC_API;
+  const api = process.env.NEXT_PUBLIC_API || "/api";
   const [baseline, setBaseline] = useState<number | null>(null);
   const [ticker, setTicker] = useState("AAPL");
   
