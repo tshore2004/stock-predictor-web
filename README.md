@@ -1,5 +1,7 @@
 # Stock Predictor Web
 
+[Live Demo](https://stock-predictor-web.vercel.app)
+
 This is a personal project created to learn about APIs, machine learning, and full-stack web development. It combines a Next.js frontend with a FastAPI backend to predict stock prices using a neural network trained on historical data and technical indicators.
 
 ## Project Purpose
