@@ -17,6 +17,7 @@ from src.ml.train import (
     train_for_ticker,
     model_path,
     scaler_path,
+    MODEL_DIR,
 )
 from src.ml.data import (
     load_data, fetch_features, SEQ_LEN, FEATS
@@ -51,10 +52,28 @@ def root():
 def ping(): return {"msg": "pong"}
 
 @app.get("/metrics")
-def metrics():
-    if not METRICS_PATH.exists():
-        raise HTTPException(status_code=404, detail="metrics.json not found")
-    return json.loads(METRICS_PATH.read_text())
+def metrics(ticker: str = "AAPL"):
+    # if not METRICS_PATH.exists():
+    #     raise HTTPException(status_code=404, detail="metrics.json not found")
+    # return json.loads(METRICS_PATH.read_text())
+
+    # 1) If legacy file is present and non-empty, use it
+    if METRICS_PATH.exists():
+        txt = METRICS_PATH.read_text().strip()
+        if txt:
+            try:
+                return json.loads(txt)
+            except Exception:
+                pass  # fall back to per-ticker cache
+
+    # 2) Fallback to the per-ticker cache in the temp dir
+    mfile = MODEL_DIR / f"{ticker.upper()}.json"
+    if not mfile.exists():
+        raise HTTPException(status_code=404, detail=f"metrics for {ticker} not found")
+    try:
+        return json.loads(mfile.read_text())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Invalid metrics file: {e}")
 
 @app.get("/latest-price")
 def latest_price(ticker: str = "AAPL"):

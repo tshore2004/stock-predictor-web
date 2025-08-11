@@ -118,13 +118,32 @@ def train_for_ticker(
         callbacks=[cb],
         verbose=0,
     )
+    
     best_mae = float(np.nanmin(hist.history["val_mae"]))
+    yhat = model.predict(X_val, verbose=0).reshape(-1)
+    yv = y_val.reshape(-1)
 
-    # 3-c  Metrics for baseline comparison
+    val_rmse = float(np.sqrt(np.mean((yhat - yv) ** 2)))
+    hit_rate = float(np.mean((yhat > 0) == (yv > 0)))  # directional accuracy (0..1)
+
     baseline = float(daily_bars(ticker, date_from, date_to)["Close"].iloc[-1])
 
+    metrics = {
+        "val_mae": best_mae,                 # percent error on returns
+        "val_rmse": val_rmse,                # percent RMSE on returns
+        "hit_rate": hit_rate,                # e.g., 0.62 = 62% direction accuracy
+        "baseline": baseline,                # last close
+        "mae_dollar": best_mae * baseline,   # $ MAE
+        "rmse_dollar": val_rmse * baseline,  # $ RMSE
+    }
+
+    # write per‑ticker (temp cache) and legacy repo file
     metrics_path = MODEL_DIR / f"{ticker}.json"
-    metrics_path.write_text(json.dumps({"val_mae": best_mae, "baseline": baseline}))
+    metrics_path.write_text(json.dumps(metrics))
+
+    repo_metrics = Path("models") / "metrics.json"
+    repo_metrics.parent.mkdir(exist_ok=True)
+    repo_metrics.write_text(json.dumps(metrics))
 
     # 3-d  Save artefacts
     model_path = MODEL_DIR / f"{ticker}.keras"
