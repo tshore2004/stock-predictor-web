@@ -1,64 +1,3 @@
-# from pathlib import Path
-# import tensorflow as tf, joblib
-# from datetime import date, timedelta
-# from sklearn.model_selection import train_test_split
-# import json, numpy as np
-# from pandas_datareader import data as web
-# from src.ml.data import load_data, _download, SEQ_LEN, FEATS
-# from src.ml.poly import daily_bars
-
-# MODEL_DIR = Path(tempfile.gettempdir()) / "stock_models"
-# MODEL_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# def build_model() -> tf.keras.Model:
-#     return tf.keras.Sequential([
-#         tf.keras.layers.Input((SEQ_LEN, len(FEATS))),
-#         tf.keras.layers.LSTM(128, return_sequences=True),
-#         tf.keras.layers.Dropout(0.2),
-#         tf.keras.layers.LSTM(64),
-#         tf.keras.layers.Dense(1),
-#     ])
-
-
-
-# if __name__ == "__main__":
-#     TICKER      = "AAPL"
-#     RANGE_FROM  = "2020-09-01"
-#     RANGE_TO = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-
-#     X, y, scaler = load_data(TICKER, RANGE_FROM, RANGE_TO)
-#     # df_all = web.DataReader(TICKER, "stooq", RANGE_FROM, RANGE_TO)
-#     df_all = daily_bars(TICKER, RANGE_FROM, RANGE_TO)
-#     baseline = float(df_all["Close"].iloc[-1])
-                     
-#     # 2. train/validation split (time‑order safe)
-#     X_tr, X_val, y_tr, y_val = train_test_split(
-#         X, y, test_size=0.2, shuffle=False
-#     )
-
-#     # 3. build & train
-#     model = build_model()
-#     model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-#     cb = tf.keras.callbacks.EarlyStopping(patience=8, restore_best_weights=True)
-
-#     history = model.fit(X_tr, y_tr,
-#               validation_data=(X_val, y_val),
-#               epochs=50,
-#               batch_size=32,
-#               callbacks=[cb],
-#               verbose=2)
-
-#     best_mae = float(np.nanmin(history.history["val_mae"]))
-
-# with open("models/metrics.json", "w") as f:
-#     json.dump({"val_mae": best_mae, "baseline": baseline}, f)
-
-#     # 4. save artefacts for the FastAPI server
-# model.save("models/stock_predictor.keras", include_optimizer=False)
-# joblib.dump(scaler, "models/scaler.joblib")
-# print("✓ model (.keras) and scaler saved")
-
 from __future__ import annotations
 from pathlib import Path
 import tempfile, json, joblib, numpy as np, tensorflow as tf
@@ -80,9 +19,14 @@ def build_model() -> tf.keras.Model:
     return tf.keras.Sequential(
         [
             tf.keras.layers.Input((SEQ_LEN, len(FEATS))),
-            tf.keras.layers.LSTM(128, return_sequences=True),
+            # Add bidirectional LSTM for better pattern recognition
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True)),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences=True)),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.LSTM(32),
             tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.LSTM(64),
+            tf.keras.layers.Dense(32, activation='relu'),
             tf.keras.layers.Dense(1),
         ]
     )
@@ -106,16 +50,36 @@ def train_for_ticker(
 
     # 3-b  Train
     model = build_model()
-    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-    cb = tf.keras.callbacks.EarlyStopping(patience=8, restore_best_weights=True)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(
+            learning_rate=0.001,
+            beta_1=0.9,
+            beta_2=0.999
+        ),
+        loss="mse",
+        metrics=["mae"]
+    )
+
+    # Add learning rate scheduler
+    lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=5,
+        min_lr=1e-7
+    )
+
+    cb = tf.keras.callbacks.EarlyStopping(
+        patience=15,  # Increased patience
+        restore_best_weights=True,
+        monitor='val_loss'
+    )
 
     hist = model.fit(
-        X_tr,
-        y_tr,
+        X_tr, y_tr,
         validation_data=(X_val, y_val),
-        epochs=50,
-        batch_size=32,
-        callbacks=[cb],
+        epochs=100,  # More epochs
+        batch_size=64,  # Try different batch sizes
+        callbacks=[cb, lr_scheduler],
         verbose=0,
     )
     
@@ -126,12 +90,32 @@ def train_for_ticker(
     val_rmse = float(np.sqrt(np.mean((yhat - yv) ** 2)))
     hit_rate = float(np.mean((yhat > 0) == (yv > 0)))  # directional accuracy (0..1)
 
+    # Add additional resume-friendly metrics
+    # R² (Coefficient of Determination)
+    ss_res = np.sum((yv - yhat) ** 2)
+    ss_tot = np.sum((yv - np.mean(yv)) ** 2)
+    r_squared = float(1 - (ss_res / ss_tot)) if ss_tot != 0 else 0.0
+
+    # Correlation coefficient
+    correlation = float(np.corrcoef(yhat, yv)[0, 1]) if len(yhat) > 1 else 0.0
+
+    # Accuracy within threshold (within 2% of actual return)
+    threshold = 0.02
+    within_threshold = float(np.mean(np.abs(yhat - yv) < threshold))
+
+    # Mean Absolute Percentage Error
+    mape = float(np.mean(np.abs((yv - yhat) / (np.abs(yv) + 1e-8)))) * 100
+
     baseline = float(daily_bars(ticker, date_from, date_to)["Close"].iloc[-1])
 
     metrics = {
         "val_mae": best_mae,                 # percent error on returns
         "val_rmse": val_rmse,                # percent RMSE on returns
         "hit_rate": hit_rate,                # e.g., 0.62 = 62% direction accuracy
+        "r_squared": r_squared,              # R² score (0-1, higher is better)
+        "correlation": correlation,           # Correlation with actual returns
+        "accuracy_within_2pct": within_threshold,  # % predictions within 2%
+        "mape": mape,                        # Mean Absolute Percentage Error
         "baseline": baseline,                # last close
         "mae_dollar": best_mae * baseline,   # $ MAE
         "rmse_dollar": val_rmse * baseline,  # $ RMSE
@@ -176,20 +160,32 @@ def load_cached_model(ticker: str):
             return keras.models.load_model(path)
     return None
 
-# ---------- 4. Helper for FastAPI endpoint ----------
-def load_model(ticker: str):
-    from tensorflow import keras
+# Add custom loss that penalizes wrong direction more
+def directional_loss(y_true, y_pred):
+    """Penalize wrong direction predictions more heavily"""
+    mse = tf.keras.losses.mean_squared_error(y_true, y_pred)
+    direction_penalty = tf.keras.backend.mean(
+        tf.keras.backend.cast(
+            tf.keras.backend.not_equal(
+                tf.keras.backend.sign(y_true), 
+                tf.keras.backend.sign(y_pred)
+            ), 
+            tf.float32
+        )
+    )
+    return mse + 0.5 * direction_penalty
 
-    for path in [model_path(ticker), repo_model_path(ticker)]:
-        if path.exists():
-            return keras.models.load_model(path)
-    return None
-
-
-# ---------- 5. CLI demo (runs only when you execute this file directly) ----------
-if __name__ == "__main__":
-    TICKER = "AAPL"
-    RANGE_FROM = "2020-09-01"
-    RANGE_TO = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-
-    train_for_ticker(TICKER, RANGE_FROM, RANGE_TO)
+# Add this helper function
+def clear_cache(ticker: str = None):
+    """Clear cached models and scalers for a ticker, or all if ticker is None."""
+    if ticker:
+        ticker = ticker.upper()
+        for ext in [".keras", ".joblib", ".json"]:
+            path = MODEL_DIR / f"{ticker}{ext}"
+            if path.exists():
+                path.unlink()
+    else:
+        # Clear all
+        for path in MODEL_DIR.glob("*"):
+            if path.is_file():
+                path.unlink()

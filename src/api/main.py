@@ -53,27 +53,29 @@ def ping(): return {"msg": "pong"}
 
 @app.get("/metrics")
 def metrics(ticker: str = "AAPL"):
-    # if not METRICS_PATH.exists():
-    #     raise HTTPException(status_code=404, detail="metrics.json not found")
-    # return json.loads(METRICS_PATH.read_text())
-
-    # 1) If legacy file is present and non-empty, use it
+    ticker = ticker.upper()
+    
+    # 1) First check per-ticker cache (most recent)
+    mfile = MODEL_DIR / f"{ticker}.json"
+    if mfile.exists():
+        try:
+            data = json.loads(mfile.read_text())
+            return data  # Return whatever is there
+        except Exception:
+            pass
+    
+    # 2) Check legacy repo file
     if METRICS_PATH.exists():
         txt = METRICS_PATH.read_text().strip()
         if txt:
             try:
-                return json.loads(txt)
+                data = json.loads(txt)
+                return data  # Return whatever is there
             except Exception:
-                pass  # fall back to per-ticker cache
-
-    # 2) Fallback to the per-ticker cache in the temp dir
-    mfile = MODEL_DIR / f"{ticker.upper()}.json"
-    if not mfile.exists():
-        raise HTTPException(status_code=404, detail=f"metrics for {ticker} not found")
-    try:
-        return json.loads(mfile.read_text())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Invalid metrics file: {e}")
+                pass
+    
+    # 3) If no metrics found, raise error
+    raise HTTPException(status_code=404, detail=f"metrics for {ticker} not found")
 
 @app.get("/latest-price")
 def latest_price(ticker: str = "AAPL"):
@@ -112,43 +114,6 @@ def latest_window(ticker: str = "AAPL"):
     window = df[FEATS].tail(SEQ_LEN).to_numpy("float32").tolist()
     return window
 
-# @app.get("/train-and-predict")
-# def train_and_predict(ticker: str = "AAPL"):
-#     try:
-#         start = "2020-01-01"
-#         end = date.today().strftime("%Y-%m-%d")
-
-#         # 1. Load data
-#         X, y, scaler = load_data(ticker, start, end)
-#         window_raw = X[-1]  # latest 60-day window (scaled)
-
-#         # 2. Build & train model
-#         model = build_model()
-#         model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-#         model.fit(X, y, epochs=10, batch_size=32, verbose=0)
-
-#         # 3. Predict
-#         yhat = model.predict(window_raw.reshape(1, *window_raw.shape))[0, 0]
-#         latest_close = scaler.inverse_transform([window_raw[-1]])[0][0]
-#         pred_close = latest_close * (1 + yhat)
-
-#         return {"prediction": float(pred_close)}
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
-
-# @app.post("/predict")
-# def predict(series: list[list[float]]):
-#     if len(series) != SEQ_LEN:
-#         raise HTTPException(status_code=400,
-#             detail=f"Need {SEQ_LEN} timesteps, got {len(series)}")
-#     X = np.asarray(series, dtype="float32").reshape(SEQ_LEN, -1)
-#     X = scaler.transform(X).reshape(1, SEQ_LEN, -1)
-#     yhat = model.predict(X, verbose=0)[0, 0]
-#     latest_close = series[-1][0]                # raw Close in last row
-#     pred_close   = latest_close * (1 + yhat)
-#     return {"prediction": float(pred_close)}
-
 @app.get("/predict")
 def predict(ticker: str = Query(..., max_length=8)):
     """
@@ -160,9 +125,20 @@ def predict(ticker: str = Query(..., max_length=8)):
 
     # ---------- 1. model cache ----------
     model = load_cached_model(ticker)
+    model_source = None
+    
     if model is None:
         train_for_ticker(ticker, five_years_ago, today)
         model = load_cached_model(ticker)
+        model_source = "trained"
+    else:
+        # Determine which cache was used
+        if model_path(ticker).exists():
+            model_source = "cache"
+        elif repo_model_path(ticker).exists():
+            model_source = "cache"
+        else:
+            model_source = "loaded"  # fallback
 
     # ---------- 2. scaler ----------
     import joblib, tensorflow as tf                           # lazy import
@@ -182,4 +158,8 @@ def predict(ticker: str = Query(..., max_length=8)):
     latest_close = window_raw[-1][0]
     pred_close   = latest_close * (1 + yhat)
 
-    return {"ticker": ticker, "prediction": pred_close}
+    return {
+        "ticker": ticker, 
+        "prediction": pred_close,
+        "model_source": model_source
+    }

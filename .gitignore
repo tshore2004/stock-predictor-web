@@ -17,3 +17,5 @@ web/node_modules/
 
 # VS Code
 .vscode/
+
+check_cache.py
